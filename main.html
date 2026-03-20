@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>G.A.C.</title>
+  <style>
+    body {
+      font-family: monospace;
+      font-size: 14px;
+      background-color: #f0f0f0;
+      color: #111;
+      margin: 20px;
+    }
+    #container {
+      display: flex;
+      flex-direction: column;
+      max-width: 1200px;
+    }
+    textarea {
+      width: 100%;
+      height: 300px;
+      font-family: monospace;
+      font-size: 14px;
+      resize: none;
+      margin-bottom: 4px;
+    }
+    input, button {
+      font-family: monospace;
+      font-size: 16px;
+      padding: 8px;
+    }
+    #name-row, #chat-row {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    #name-row input, #chat-row input {
+      flex: 1;
+    }
+  </style>
+</head>
+<body>
+  <h2>Global Access Chatroom</h2>
+  <div id="container">
+    <div id="name-row">
+      <label for="name">Username:</label>
+      <input id="name-input" placeholder="Anonymous">
+      <button id="nameBtn">Enter</button>
+    </div>
+
+    <textarea id="c" placeholder="Messages will appear here..." readonly></textarea>
+
+    <div id="chat-row">
+      <input type="text" id="m" placeholder="Type message here..." />
+      <button id="sendBtn">Send</button>
+    </div>
+  </div>
+  <p>
+    Tagging structure:<br>
+      [!] Server and Admins<br>
+      [?] Users<br>
+  </p>
+
+  <!-- Socket.IO client -->
+  <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+  <script>
+    const c = document.getElementById("c");
+    const m = document.getElementById("m");
+    const sendBtn = document.getElementById("sendBtn");
+    const nameInput = document.getElementById("name-input");
+    const nameBtn = document.getElementById("nameBtn");
+
+    let usr = nameInput.value.trim() || "Anonymous";
+
+    // Connect automatically to Flask-SocketIO server
+    //const socket = io();  // andy.du
+    const socket = io({
+      path: "/chat/socket.io"
+    });
+
+    // Display incoming messages
+    socket.on('message', (msg) => {
+      c.value += msg + "\n";
+      c.scrollTop = c.scrollHeight;
+    });
+
+    socket.on("name_change_approved", (newName) => {
+        usr = newName;
+    });
+
+    socket.on("admin_approved", (newName) => {
+      usr = newName;
+      nameInput.value = newName;
+    });
+    let lastSent = 0;
+    const COOLDOWN = 1000; // milliseconds
+    function canSend() {
+        const now = Date.now();
+        if (now - lastSent < COOLDOWN) return false; // still cooling down
+        lastSent = now;
+        return true;
+    }
+    // Send chat message
+    function send() {
+      if (!canSend()) return;
+      const txt = m.value.trim().slice(0, 250);
+      if (!txt) return;
+
+        socket.emit('chat_message', `${usr.padEnd(15)}> ${txt}`);
+      m.value = "";
+      m.focus();
+    }
+
+    sendBtn.addEventListener("click", send);
+
+    m.addEventListener("keydown", function(event) {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        send();
+      }
+    });
+
+
+    // Change username
+    function changeName() {
+      if (!canSend()) return;
+      const newName = nameInput.value.trim().slice(0, 15);
+      socket.emit("admin_request", newName);
+      socket.emit('name_change_request', newName);
+    }
+
+    nameBtn.addEventListener("click", changeName);
+    nameInput.addEventListener("keydown", function(event) {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        changeName();
+      }
+    });
+  </script>
+</body>
+</html>
